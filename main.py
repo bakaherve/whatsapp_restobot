@@ -1,17 +1,24 @@
 from flask import Flask, request, render_template
 from twilio.twiml.messaging_response import MessagingResponse
-from supabase import create_client, Client
+from twilio.rest import Client
+from supabase import create_client, Client as SupabaseClient
 from datetime import datetime
 import os
 
 app = Flask(__name__)
 
-# --- 🔐 Supabase config ---
+# --- 🔐 Load secrets ---
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
 
-# --- 🍽 Menu du jour ---
+# --- Initialize clients ---
+supabase: SupabaseClient = create_client(SUPABASE_URL, SUPABASE_KEY)
+twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+
+# --- Menu du jour ---
 menu = {
     "1": ("Riz au poisson", 6000),
     "2": ("Poulet braisé", 8000),
@@ -22,7 +29,7 @@ menu = {
 # --- États utilisateurs ---
 user_state = {}
 
-# --- 🧮 Fonction panier ---
+# --- Fonction panier ---
 def format_cart(orders):
     lines, total = [], 0
     for item in orders:
@@ -34,7 +41,7 @@ def format_cart(orders):
     return "\n".join(lines), total
 
 
-# --- 💾 Sauvegarde commande dans Supabase ---
+# --- Sauvegarde dans Supabase ---
 def save_order_to_supabase(number, orders, address):
     try:
         items_summary = ", ".join([f"{o['qty']}x {o['dish']}" for o in orders])
@@ -55,7 +62,7 @@ def save_order_to_supabase(number, orders, address):
         return None, None
 
 
-# --- 🌍 Webhook principal ---
+# --- Webhook principal ---
 @app.route("/webhook", methods=["POST"])
 def webhook():
     from_number = request.form.get("From")
@@ -68,7 +75,6 @@ def webhook():
 
     state = user_state[from_number]
 
-    # --- Menu principal ---
     if state["stage"] == "main":
         if msg == "1":
             menu_text = "\n".join([f"{k}️⃣ {v[0]} – {v[1]:,} CDF" for k, v in menu.items()])
@@ -83,7 +89,6 @@ def webhook():
             reply.body("👋 Bienvenue chez *Mama Mia Restaurant !*\nTapez :\n1️⃣ Menu\n2️⃣ Commander\n3️⃣ Nos horaires")
         return str(resp)
 
-    # --- Choix du plat ---
     if state["stage"] == "choose_dish":
         if msg in menu:
             dish_name, price = menu[msg]
@@ -94,7 +99,6 @@ def webhook():
             reply.body("Choix invalide. Tapez un numéro du menu.")
         return str(resp)
 
-    # --- Quantité ---
     if state["stage"] == "choose_quantity":
         if msg.isdigit() and int(msg) > 0:
             qty = int(msg)
@@ -106,7 +110,6 @@ def webhook():
             reply.body("Merci d’entrer une quantité valide (ex : 2).")
         return str(resp)
 
-    # --- Ajouter un autre plat ---
     if state["stage"] == "add_more":
         if msg == "1":
             menu_text = "\n".join([f"{k}️⃣ {v[0]}" for k, v in menu.items()])
@@ -119,7 +122,6 @@ def webhook():
             reply.body("Répondez 1 (oui) ou 2 (non).")
         return str(resp)
 
-    # --- Adresse + résumé ---
     if state["stage"] == "waiting_address":
         state["address"] = msg
         cart_text, total = format_cart(state["orders"])
@@ -127,10 +129,8 @@ def webhook():
         state["stage"] = "confirm_order"
         return str(resp)
 
-    # --- Confirmation finale ---
     if state["stage"] == "confirm_order":
         if msg == "1":
-            print(f"📝 Sauvegarde de la commande pour {from_number}...")
             total, order_id = save_order_to_supabase(from_number, state["orders"], state["address"])
             if order_id:
                 reply.body(f"✅ *Commande n°{order_id} enregistrée !*\n💰 Total : {total:,} CDF\n🚗 Livraison en préparation.\n\nMerci pour votre commande 🙏")
@@ -148,17 +148,49 @@ def webhook():
     return str(resp)
 
 
-# --- 🖥️ Admin Dashboard ---
+# --- Admin dashboard ---
 @app.route("/admin")
-def admin_dashboard():
+def admin():
     try:
-        response = supabase.table("orders").select("*").order("id", desc=True).execute()
-        orders = response.data
+        data = supabase.table("orders").select("*").order("id", desc=True).execute()
+        return render_template("dashboard.html", orders=data.data)
     except Exception as e:
-        orders = []
-        print("Error fetching data:", e)
+        return f"<h3>❌ Error loading dashboard: {e}</h3>"
 
-    return render_template("dashboard.html", orders=orders)
+
+# --- Update order status ---
+@app.route("/update_status", methods=["POST"])
+def update_status():
+    order_id = request.form.get("order_id")
+
+    try:
+        supabase.table("orders").update({"status": "delivered"}).eq("id", order_id).execute()
+        print(f"✅ Order {order_id} marked as delivered.")
+
+        # Retrieve order info
+        order = supabase.table("orders").select("number, items, total").eq("id", order_id).single().execute().data
+        number, items, total = order["number"], order["items"], order["total"]
+
+        # Send WhatsApp message
+        message = (
+            f"✅ *Commande livrée !*\n\n"
+            f"Vos plats : {items}\n"
+            f"Montant total : {total:,} CDF\n\n"
+            f"Merci d’avoir commandé chez *Mama Mia Restaurant* 🍽️"
+        )
+        twilio_client.messages.create(from_=TWILIO_WHATSAPP_NUMBER, to=number, body=message)
+        print(f"📩 WhatsApp message sent to {number}")
+
+        return """
+        <script>
+          alert('Order marked as delivered ✅');
+          window.location.href = '/admin?' + new Date().getTime();
+        </script>
+        """
+
+    except Exception as e:
+        print(f"❌ Error updating order: {e}")
+        return f"<h3>Error: {e}</h3>"
 
 
 @app.route("/")
