@@ -3,191 +3,114 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ rname }} - Tableau de bord</title>
+    <title>{{ rname or "Mama Mia Restaurant" }} - Tableau de bord</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        :root {
-            --brand-color: #2d6a4f;
-            --accent-color: #95d5b2;
-            --bg-light: #f7f8fc;
-            --text-dark: #222;
-        }
         body {
-            font-family: "Segoe UI", Arial, sans-serif;
-            background-color: var(--bg-light);
-            color: var(--text-dark);
-            margin: 0;
-            padding: 0;
+            background-color: #f9fafb;
         }
-        header {
-            background-color: var(--brand-color);
-            color: white;
-            padding: 20px;
-            text-align: center;
-            position: sticky;
-            top: 0;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        .navbar {
+            background-color: #198754;
         }
-        header h1 {
-            margin: 0;
-            font-size: 1.8rem;
-        }
-        header span {
-            color: var(--accent-color);
+        .navbar-brand {
+            color: white !important;
+            font-weight: 600;
         }
         .logout {
-            position: absolute;
-            top: 20px;
-            right: 30px;
-            background-color: #ef233c;
-            color: white;
-            padding: 6px 12px;
-            border-radius: 6px;
+            color: #fff;
             text-decoration: none;
-            font-weight: 600;
         }
         .logout:hover {
-            background-color: #d90429;
+            text-decoration: underline;
         }
-
-        main {
-            margin: 30px auto;
-            width: 95%;
-            max-width: 1200px;
-            background: white;
-            padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
-        }
-
         table {
-            border-collapse: collapse;
-            width: 100%;
-            margin-top: 10px;
-        }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 10px 8px;
-            text-align: left;
-            font-size: 0.95rem;
+            background-color: white;
         }
         th {
-            background-color: var(--brand-color);
-            color: white;
-            text-transform: uppercase;
+            background-color: #e9ecef;
         }
-        tr:nth-child(even) { background-color: #f9f9f9; }
-        tr:hover { background-color: #f1f1f1; }
-
-        .delivered {
-            color: #2d6a4f;
-            font-weight: 600;
+        td, th {
+            vertical-align: middle !important;
         }
-        .pending {
-            color: #ff6b6b;
-            font-weight: 600;
+        .btn-sm {
+            padding: 3px 8px;
         }
-
-        form {
-            display: inline;
+        .badge-status {
+            font-size: 0.85rem;
+            padding: 0.35em 0.6em;
         }
-        button {
-            background-color: var(--brand-color);
-            color: white;
-            border: none;
-            padding: 6px 10px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-weight: 600;
-        }
-        button:hover {
-            background-color: #1b4332;
-        }
-
-        @media (max-width: 768px) {
-            table, thead, tbody, th, td, tr {
-                display: block;
-            }
-            th {
-                display: none;
-            }
-            td {
-                border: none;
-                border-bottom: 1px solid #ddd;
-                position: relative;
-                padding-left: 50%;
-                text-align: right;
-            }
-            td::before {
-                content: attr(data-label);
-                position: absolute;
-                left: 10px;
-                width: 45%;
-                white-space: nowrap;
-                text-align: left;
-                font-weight: 600;
-                color: #555;
-            }
+        footer {
+            font-size: 0.8rem;
+            color: #6c757d;
+            text-align: center;
+            padding: 10px 0;
         }
     </style>
 </head>
 <body>
 
-<header>
-    <h1>{{ rname }} <span>- Tableau de bord</span></h1>
-    <a class="logout" href="/logout">Déconnexion</a>
-</header>
+<nav class="navbar px-4">
+    <span class="navbar-brand">{{ rname or "Mama Mia Restaurant" }} - Tableau de bord</span>
+    <a href="{{ url_for('logout') }}" class="logout">Déconnexion</a>
+</nav>
 
-<main>
+<div class="container mt-4">
     {% if orders %}
-    <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Date</th>
-                <th>Numéro</th>
-                <th>Commande</th>
-                <th>Total (CDF)</th>
-                <th>Adresse</th>
-                <th>Status</th>
-                <th>Confirmation</th>
-                <th>Action</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for order in orders %}
-            <tr>
-                <td data-label="ID">{{ order['id'] }}</td>
-                <td data-label="Date">{{ order['date'] }}</td>
-                <td data-label="Numéro">{{ order['number'] }}</td>
-                <td data-label="Commande">{{ order['items'] }}</td>
-                <td data-label="Total">{{ order['total'] }}</td>
-                <td data-label="Adresse">{{ order['address'] }}</td>
-                <td data-label="Status">
-                    {% if order['status'] == 'delivered' %}
-                        <span class="delivered">Livrée</span>
-                    {% else %}
-                        <span class="pending">En attente</span>
-                    {% endif %}
-                </td>
-                <td data-label="Confirmation">{{ order['confirmed_by'] if order['confirmed_by'] else "—" }}</td>
-                <td data-label="Action">
-                    {% if order['status'] != 'delivered' %}
-                        <form method="POST" action="/update_status">
-                            <input type="hidden" name="order_id" value="{{ order['id'] }}">
-                            <button type="submit">✅ Marquer livrée</button>
+    <div class="table-responsive shadow-sm rounded">
+        <table class="table table-bordered table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Date</th>
+                    <th>Numéro</th>
+                    <th>Commande</th>
+                    <th>Total (CDF)</th>
+                    <th>Adresse</th>
+                    <th>Status</th>
+                    <th>Confirmation</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in orders %}
+                <tr>
+                    <td>{{ order.id }}</td>
+                    <td>{{ order.date[:19].replace("T"," ") if order.date else "" }}</td>
+                    <td>{{ order.number }}</td>
+                    <td>{{ order.items }}</td>
+                    <td>{{ "{:,}".format(order.total|int) }}</td>
+                    <td>{{ order.address }}</td>
+                    <td>
+                        {% if order.status == "delivered" %}
+                            <span class="badge bg-success badge-status">Livrée</span>
+                        {% else %}
+                            <span class="badge bg-warning text-dark badge-status">En attente</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ order.confirmed_by or "—" }}</td>
+                    <td>
+                        {% if order.status != "delivered" %}
+                        <form action="{{ url_for('update_status') }}" method="post">
+                            <input type="hidden" name="order_id" value="{{ order.id }}">
+                            <button class="btn btn-success btn-sm">✅ Livrée</button>
                         </form>
-                    {% else %}
+                        {% else %}
                         —
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
     {% else %}
-        <p>Aucune commande disponible.</p>
+        <div class="alert alert-info mt-4 text-center">Aucune commande enregistrée.</div>
     {% endif %}
-</main>
+</div>
+
+<footer class="mt-4">
+    © {{ rname or "Mama Mia" }} powered by {{ brand or "RestoBot" }}
+</footer>
 
 </body>
 </html>
