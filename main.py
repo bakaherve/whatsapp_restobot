@@ -7,27 +7,35 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 
-# --- 🧭 Logging setup ---
+# --- ⚙️ Logging Setup (clean & focused) ---
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    format="%(asctime)s | %(levelname)-7s | %(message)s",
+    datefmt="%H:%M:%S"
 )
-handler = RotatingFileHandler("app.log", maxBytes=1000000, backupCount=3)
+
+handler = RotatingFileHandler("app.log", maxBytes=1_000_000, backupCount=3)
 logging.getLogger().addHandler(handler)
+
+# Silence noisy frameworks
+logging.getLogger('werkzeug').setLevel(logging.WARNING)
+logging.getLogger('supabase').setLevel(logging.WARNING)
+logging.getLogger('httpx').setLevel(logging.WARNING)
 
 app = Flask(__name__)
 
-# --- 🔐 Load secrets ---
+# --- 🔐 Load Secrets ---
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
 
-# --- Initialize clients ---
+# --- Initialize Clients ---
 supabase: SupabaseClient = create_client(SUPABASE_URL, SUPABASE_KEY)
 twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+
+logging.info("🚀 WhatsApp bot started successfully.")
 
 # --- Menu du jour ---
 menu = {
@@ -40,7 +48,8 @@ menu = {
 # --- États utilisateurs ---
 user_state = {}
 
-# --- Fonction panier ---
+
+# --- 🧾 Panier (cart) ---
 def format_cart(orders):
     lines, total = [], 0
     for item in orders:
@@ -52,7 +61,7 @@ def format_cart(orders):
     return "\n".join(lines), total
 
 
-# --- Sauvegarde dans Supabase ---
+# --- 💾 Save order to Supabase ---
 def save_order_to_supabase(number, orders, address):
     try:
         items_summary = ", ".join([f"{o['qty']}x {o['dish']}" for o in orders])
@@ -66,14 +75,15 @@ def save_order_to_supabase(number, orders, address):
             "status": "pending"
         }
         result = supabase.table("orders").insert(data).execute()
-        logging.info(f"Order saved to Supabase: {result.data}")
-        return total, result.data[0]["id"]
+        order_id = result.data[0]["id"]
+        logging.info(f"🧾 Order saved | ID: {order_id} | {number} | {items_summary} | {total:,} CDF")
+        return total, order_id
     except Exception as e:
-        logging.error(f"Error saving to Supabase: {e}")
+        logging.error(f"❌ Error saving to Supabase: {e}")
         return None, None
 
 
-# --- Webhook principal ---
+# --- 📬 Webhook (main bot logic) ---
 @app.route("/webhook", methods=["POST"])
 def webhook():
     from_number = request.form.get("From")
@@ -145,10 +155,10 @@ def webhook():
             total, order_id = save_order_to_supabase(from_number, state["orders"], state["address"])
             if order_id:
                 reply.body(f"✅ *Commande n°{order_id} enregistrée !*\n💰 Total : {total:,} CDF\n🚗 Livraison en préparation.\n\nMerci pour votre commande 🙏")
-                logging.info(f"Order {order_id} saved successfully for {from_number}")
+                logging.info(f"✅ Order {order_id} confirmed by {from_number}")
             else:
                 reply.body("❌ Une erreur est survenue lors de l’enregistrement. Réessayez plus tard.")
-                logging.warning(f"Order failed for {from_number}")
+                logging.error(f"Order save failed for {from_number}")
             user_state[from_number] = {"stage": "main", "orders": [], "dish": None}
         elif msg == "2":
             reply.body("Pas de souci ! Quel plat souhaitez-vous modifier ?\n" + "\n".join([f"{k}️⃣ {v[0]}" for k, v in menu.items()]))
@@ -161,39 +171,37 @@ def webhook():
     return str(resp)
 
 
-# --- Admin dashboard ---
+# --- 📊 Admin Dashboard ---
 @app.route("/admin")
 def admin():
     try:
         data = supabase.table("orders").select("*").order("id", desc=True).execute()
         return render_template("dashboard.html", orders=data.data)
     except Exception as e:
-        logging.error(f"Error loading dashboard: {e}")
-        return f"<h3>❌ Error loading dashboard: {e}</h3>"
+        logging.error(f"❌ Error loading dashboard: {e}")
+        return f"<h3>Error loading dashboard: {e}</h3>"
 
 
-# --- Update order status ---
+# --- 🚚 Update Order Status ---
 @app.route("/update_status", methods=["POST"])
 def update_status():
     order_id = request.form.get("order_id")
-
     try:
         supabase.table("orders").update({"status": "delivered"}).eq("id", order_id).execute()
-        logging.info(f"Order {order_id} marked as delivered.")
+        logging.info(f"🟢 Order {order_id} marked as delivered.")
 
-        # Retrieve order info
         order = supabase.table("orders").select("number, items, total").eq("id", order_id).single().execute().data
         number, items, total = order["number"], order["items"], order["total"]
 
-        # Send WhatsApp message
         message = (
             f"✅ *Commande livrée !*\n\n"
             f"Vos plats : {items}\n"
             f"Montant total : {total:,} CDF\n\n"
             f"Merci d’avoir commandé chez *Mama Mia Restaurant* 🍽️"
         )
+
         twilio_client.messages.create(from_=TWILIO_WHATSAPP_NUMBER, to=number, body=message)
-        logging.info(f"WhatsApp message sent to {number}")
+        logging.info(f"📩 WhatsApp confirmation sent to {number}")
 
         return """
         <script>
@@ -201,9 +209,8 @@ def update_status():
           window.location.href = '/admin?' + new Date().getTime();
         </script>
         """
-
     except Exception as e:
-        logging.error(f"Error updating order {order_id}: {e}")
+        logging.error(f"❌ Error updating order {order_id}: {e}")
         return f"<h3>Error: {e}</h3>"
 
 
