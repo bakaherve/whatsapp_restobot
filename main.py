@@ -7,7 +7,7 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 
-# ---------- Logging (clean & focused) ----------
+# ---------- Logging ----------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)-7s | %(message)s",
@@ -21,7 +21,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # ---------- App ----------
 app = Flask(__name__)
-app.secret_key = os.getenv("SESSION_SECRET", "change_me_in_env")  # set in env on Render/Replit
+app.secret_key = os.getenv("SESSION_SECRET", "change_me_in_env")
 
 # ---------- Secrets / Config ----------
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -41,9 +41,9 @@ RESTAURANT_NAME = os.getenv("RESTAURANT_NAME", "Mama Mia Restaurant")
 supabase: SupabaseClient = create_client(SUPABASE_URL, SUPABASE_KEY)
 twilio_client = TwilioClient(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
-logging.info("🚀 RestoBot started successfully")
+logging.info("🚀 RestoBot v3.0 Pro Hybrid started successfully")
 
-# ---------- Menu (demo) ----------
+# ---------- Menu ----------
 menu = {
     "1": ("Riz au poisson", 6000),
     "2": ("Poulet braisé", 8000),
@@ -51,7 +51,6 @@ menu = {
     "4": ("Jus naturel", 2500),
 }
 
-# In-memory user state (ok for single instance demo)
 user_state = {}
 
 # ---------- Helpers ----------
@@ -65,6 +64,7 @@ def format_cart(orders):
     lines.append(f"\n💰 *Total : {total:,} CDF*")
     return "\n".join(lines), total
 
+
 def save_order_to_supabase(number, orders, address):
     try:
         items_summary = ", ".join([f"{o['qty']}x {o['dish']}" for o in orders])
@@ -76,6 +76,7 @@ def save_order_to_supabase(number, orders, address):
             "total": total,
             "address": address,
             "status": "pending",
+            "confirmed_by": None
         }
         res = supabase.table("orders").insert(payload).execute()
         order_id = res.data[0]["id"]
@@ -85,6 +86,7 @@ def save_order_to_supabase(number, orders, address):
         logging.error(f"❌ Error saving order: {e}")
         return None, None
 
+
 # ---------- WhatsApp Webhook ----------
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -93,6 +95,32 @@ def webhook():
     resp = MessagingResponse()
     reply = resp.message()
 
+    # --- ✅ Semi-Automatic Hybrid Delivery Confirmation ---
+    if msg.lower() in ["1", "livré", "livree", "delivered"]:
+        try:
+            query = (
+                supabase.table("orders")
+                .select("*")
+                .eq("number", from_number)
+                .eq("status", "pending")
+                .order("id", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if query.data:
+                order_id = query.data[0]["id"]
+                supabase.table("orders").update({"status": "delivered", "confirmed_by": "client"}).eq("id", order_id).execute()
+                reply.body("✅ Merci ! Votre commande est confirmée comme livrée. Bon appétit 🍽️")
+                logging.info(f"🤖 Client confirmed delivery | {from_number} | order_id={order_id}")
+            else:
+                reply.body("ℹ️ Aucune commande en attente trouvée ou déjà livrée.")
+                logging.info(f"ℹ️ Client tried to confirm but no pending order: {from_number}")
+        except Exception as e:
+            logging.error(f"❌ Error client confirmation: {e}")
+            reply.body("⚠️ Erreur interne, veuillez réessayer plus tard.")
+        return str(resp)
+
+    # --- Normal restaurant bot flow ---
     if from_number not in user_state:
         user_state[from_number] = {"stage": "main", "orders": [], "dish": None}
 
@@ -136,7 +164,7 @@ def webhook():
             reply.body("Merci d’entrer une quantité valide (ex : 2).")
         return str(resp)
 
-    # Add more?
+    # Add more
     if state["stage"] == "add_more":
         if msg == "1":
             menu_text = "\n".join([f"{k}️⃣ {v[0]}" for k, v in menu.items()])
@@ -170,11 +198,10 @@ def webhook():
                     f"✅ *Commande n°{order_id} enregistrée !*\n"
                     f"💰 Total : {total:,} CDF\n"
                     f"🚗 Livraison en préparation.\n\n"
-                    f"Merci d’avoir commandé chez *{RESTAURANT_NAME}* 🍽️"
+                    f"Quand vous la recevrez, tapez *1* pour confirmer la livraison."
                 )
             else:
                 reply.body("❌ Une erreur est survenue lors de l’enregistrement. Réessayez plus tard.")
-            # reset user
             user_state[from_number] = {"stage": "main", "orders": [], "dish": None}
         elif msg == "2":
             reply.body("Pas de souci ! Quel plat souhaitez-vous modifier ?\n" +
@@ -186,6 +213,7 @@ def webhook():
         return str(resp)
 
     return str(resp)
+
 
 # ---------- Auth ----------
 @app.route("/login", methods=["GET", "POST"])
@@ -202,18 +230,21 @@ def login():
         return render_template("login.html", error="Identifiants invalides.")
     return render_template("login.html")
 
+
 @app.route("/logout")
 def logout():
     session.pop("logged_in", None)
     session.pop("restaurant_name", None)
     return redirect(url_for("login"))
 
-# ---------- Protect admin routes ----------
+
+# ---------- Protect admin ----------
 @app.before_request
 def protect_admin():
     if request.path.startswith("/admin") or request.path.startswith("/update_status"):
         if not session.get("logged_in"):
             return redirect(url_for("login"))
+
 
 # ---------- Admin Dashboard ----------
 @app.route("/admin")
@@ -225,18 +256,17 @@ def admin():
         logging.error(f"❌ Dashboard error: {e}")
         return "<h3>Dashboard error</h3>", 500
 
-# ---------- Update status + notify customer ----------
+
+# ---------- Update status + notify ----------
 @app.route("/update_status", methods=["POST"])
 def update_status():
     order_id = request.form.get("order_id")
     try:
-        # 1) Update DB
-        supabase.table("orders").update({"status": "delivered"}).eq("id", order_id).execute()
-        logging.info(f"🟢 Order {order_id} marked delivered")
-        # 2) Fetch contact
+        supabase.table("orders").update({"status": "delivered", "confirmed_by": "admin"}).eq("id", order_id).execute()
+        logging.info(f"🟢 Order {order_id} marked delivered manually")
+        # Fetch contact
         row = supabase.table("orders").select("number, items, total").eq("id", order_id).single().execute().data
         number, items, total = row["number"], row["items"], row["total"]
-        # 3) WhatsApp confirm
         msg = (
             f"✅ *Commande livrée !*\n\n"
             f"Vos plats : {items}\n"
@@ -245,7 +275,6 @@ def update_status():
         )
         twilio_client.messages.create(from_=TWILIO_WHATSAPP_NUMBER, to=number, body=msg)
         logging.info(f"📩 Delivery confirmation sent to {number}")
-        # quick redirect
         return """
         <script>
           alert('Commande marquée livrée ✅');
@@ -256,16 +285,18 @@ def update_status():
         logging.error(f"❌ Update/delivery error: {e}")
         return f"<h3>Error: {e}</h3>", 500
 
-# ---------- Health / Home ----------
+
+# ---------- Health ----------
 @app.route("/")
 def home():
-    return "RestoBot is running ✅", 200
+    return "🍽️ RestoBot v3.0 Pro Hybrid running ✅", 200
+
 
 @app.route("/health")
 def health():
     return {"ok": True}, 200
 
+
 if __name__ == "__main__":
-    # For Render, keep this simple run; Render sets PORT. Locally we use 5000.
     port = int(os.getenv("PORT", "5000"))
     app.run(host="0.0.0.0", port=port)
