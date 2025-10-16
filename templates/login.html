@@ -1,30 +1,25 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <title>Connexion – RestoBot</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="UTF-8">
+  <title>Connexion - RestoBot</title>
   <style>
-    body { background:#f3f4f6; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }
-    .card { background:#fff; padding:32px; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.08); width:320px; }
-    h1 { font-size:20px; margin:0 0 16px; }
-    input { width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px; margin:8px 0 14px; }
-    button { width:100%; padding:10px 12px; border:none; border-radius:8px; background:#111827; color:#fff; cursor:pointer; }
-    button:hover { background:#0b1220; }
-    .error { color:#dc2626; margin-top:8px; font-size:14px; }
-    .brand { font-size:12px; color:#6b7280; margin-top:12px; text-align:center; }
+    body { background: #f6f7fb; font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; }
+    .login-box { background: white; padding: 40px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    h2 { margin-bottom: 20px; color: #2c3e50; }
+    input { display: block; width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 5px; }
+    button { background: #27ae60; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer; width: 100%; }
+    button:hover { background: #2ecc71; }
+    .error { color: red; margin-bottom: 10px; }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>🔒 Connexion RestoBot</h1>
+  <div class="login-box">
+    <h2>Connexion Admin</h2>
+    {% if error %}
+      <p class="error">{{ error }}</p>
+    {% endif %}
     <form method="POST">
-      <input type="text" name="username" placeholder="Nom d'utilisateur" required />
-      <input type="password" name="password" placeholder="Mot de passe" required />
-      <button type="submit">Se connecter</button>
-      {% if error %}<div class="error">{{ error }}</div>{% endif %}
-    </form>
-    <div class="brand">© 2025 RestoBot</div>
-  </div>
-</body>
-</html>
+      <input type="text" name="username" placeholder="Nom d’utilisateur" required>
+      <input type="password" name="password" placeholder="Mot de passe" required>
+     
