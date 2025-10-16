@@ -23,6 +23,12 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 app = Flask(__name__)
 app.secret_key = os.getenv("SESSION_SECRET", "change_me_in_env")
 
+# --- Fix session persistence for Replit ---
+app.config["SESSION_PERMANENT"] = False
+app.config["SESSION_TYPE"] = "filesystem"
+app.config["SESSION_FILE_DIR"] = "/tmp/flask_session"  # Replit-safe path
+
+
 # ---------- Secrets / Config ----------
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
