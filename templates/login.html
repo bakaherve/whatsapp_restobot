@@ -1,1 +1,50 @@
 
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Login - WhatsApp RestoBot</title>
+  <style>
+    body {
+      background: #f2f2f2;
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    form {
+      background: white;
+      padding: 40px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    input[type="password"] {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+    button {
+      background: #4CAF50;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover { background: #43a047; }
+    .error { color: red; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <form method="POST">
+    <h2>🔒 Admin Login</h2>
+    <input type="password" name="password" placeholder="Mot de passe admin" required>
+    <button type="submit">Se connecter</button>
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  </form>
+</body>
+</html>
