@@ -4,6 +4,17 @@ from twilio.rest import Client
 from supabase import create_client, Client as SupabaseClient
 from datetime import datetime
 import os
+import logging
+from logging.handlers import RotatingFileHandler
+
+# --- 🧭 Logging setup ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+handler = RotatingFileHandler("app.log", maxBytes=1000000, backupCount=3)
+logging.getLogger().addHandler(handler)
 
 app = Flask(__name__)
 
@@ -55,10 +66,10 @@ def save_order_to_supabase(number, orders, address):
             "status": "pending"
         }
         result = supabase.table("orders").insert(data).execute()
-        print(f"✅ Order saved to Supabase: {result.data}")
+        logging.info(f"Order saved to Supabase: {result.data}")
         return total, result.data[0]["id"]
     except Exception as e:
-        print(f"❌ Error saving to Supabase: {e}")
+        logging.error(f"Error saving to Supabase: {e}")
         return None, None
 
 
@@ -134,8 +145,10 @@ def webhook():
             total, order_id = save_order_to_supabase(from_number, state["orders"], state["address"])
             if order_id:
                 reply.body(f"✅ *Commande n°{order_id} enregistrée !*\n💰 Total : {total:,} CDF\n🚗 Livraison en préparation.\n\nMerci pour votre commande 🙏")
+                logging.info(f"Order {order_id} saved successfully for {from_number}")
             else:
                 reply.body("❌ Une erreur est survenue lors de l’enregistrement. Réessayez plus tard.")
+                logging.warning(f"Order failed for {from_number}")
             user_state[from_number] = {"stage": "main", "orders": [], "dish": None}
         elif msg == "2":
             reply.body("Pas de souci ! Quel plat souhaitez-vous modifier ?\n" + "\n".join([f"{k}️⃣ {v[0]}" for k, v in menu.items()]))
@@ -155,6 +168,7 @@ def admin():
         data = supabase.table("orders").select("*").order("id", desc=True).execute()
         return render_template("dashboard.html", orders=data.data)
     except Exception as e:
+        logging.error(f"Error loading dashboard: {e}")
         return f"<h3>❌ Error loading dashboard: {e}</h3>"
 
 
@@ -165,7 +179,7 @@ def update_status():
 
     try:
         supabase.table("orders").update({"status": "delivered"}).eq("id", order_id).execute()
-        print(f"✅ Order {order_id} marked as delivered.")
+        logging.info(f"Order {order_id} marked as delivered.")
 
         # Retrieve order info
         order = supabase.table("orders").select("number, items, total").eq("id", order_id).single().execute().data
@@ -179,7 +193,7 @@ def update_status():
             f"Merci d’avoir commandé chez *Mama Mia Restaurant* 🍽️"
         )
         twilio_client.messages.create(from_=TWILIO_WHATSAPP_NUMBER, to=number, body=message)
-        print(f"📩 WhatsApp message sent to {number}")
+        logging.info(f"WhatsApp message sent to {number}")
 
         return """
         <script>
@@ -189,7 +203,7 @@ def update_status():
         """
 
     except Exception as e:
-        print(f"❌ Error updating order: {e}")
+        logging.error(f"Error updating order {order_id}: {e}")
         return f"<h3>Error: {e}</h3>"
 
 
