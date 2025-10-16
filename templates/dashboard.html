@@ -1,70 +1,193 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <title>{{ brand }} - Tableau de bord</title>
-  <style>
-    body { font-family: Arial, sans-serif; background: #fafafa; margin: 20px; color: #333; }
-    h1 { color: #2c3e50; }
-    table { border-collapse: collapse; width: 100%; margin-top: 20px; background: white; }
-    th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
-    th { background: #f2f2f2; }
-    tr:hover { background: #f9f9f9; }
-    .logout { float: right; }
-    .btn { padding: 6px 10px; border: none; border-radius: 5px; cursor: pointer; }
-    .btn-success { background: #27ae60; color: white; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ rname }} - Tableau de bord</title>
+    <style>
+        :root {
+            --brand-color: #2d6a4f;
+            --accent-color: #95d5b2;
+            --bg-light: #f7f8fc;
+            --text-dark: #222;
+        }
+        body {
+            font-family: "Segoe UI", Arial, sans-serif;
+            background-color: var(--bg-light);
+            color: var(--text-dark);
+            margin: 0;
+            padding: 0;
+        }
+        header {
+            background-color: var(--brand-color);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+        header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+        }
+        header span {
+            color: var(--accent-color);
+        }
+        .logout {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            background-color: #ef233c;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .logout:hover {
+            background-color: #d90429;
+        }
+
+        main {
+            margin: 30px auto;
+            width: 95%;
+            max-width: 1200px;
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px 8px;
+            text-align: left;
+            font-size: 0.95rem;
+        }
+        th {
+            background-color: var(--brand-color);
+            color: white;
+            text-transform: uppercase;
+        }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        tr:hover { background-color: #f1f1f1; }
+
+        .delivered {
+            color: #2d6a4f;
+            font-weight: 600;
+        }
+        .pending {
+            color: #ff6b6b;
+            font-weight: 600;
+        }
+
+        form {
+            display: inline;
+        }
+        button {
+            background-color: var(--brand-color);
+            color: white;
+            border: none;
+            padding: 6px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        button:hover {
+            background-color: #1b4332;
+        }
+
+        @media (max-width: 768px) {
+            table, thead, tbody, th, td, tr {
+                display: block;
+            }
+            th {
+                display: none;
+            }
+            td {
+                border: none;
+                border-bottom: 1px solid #ddd;
+                position: relative;
+                padding-left: 50%;
+                text-align: right;
+            }
+            td::before {
+                content: attr(data-label);
+                position: absolute;
+                left: 10px;
+                width: 45%;
+                white-space: nowrap;
+                text-align: left;
+                font-weight: 600;
+                color: #555;
+            }
+        }
+    </style>
 </head>
 <body>
-  <h1>{{ rname }} - Tableau de bord</h1>
-  <a class="logout" href="/logout">🚪 Déconnexion</a>
 
-  <table>
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>Date</th>
-        <th>Numéro</th>
-        <th>Commande</th>
-        <th>Total (CDF)</th>
-        <th>Adresse</th>
-        <th>Status</th>
-        <th>Confirmation</th>
-        <th>Action</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for order in orders %}
-      <tr>
-        <td>{{ order.id }}</td>
-        <td>{{ order.date }}</td>
-        <td>{{ order.number }}</td>
-        <td>{{ order.items }}</td>
-        <td>{{ order.total }}</td>
-        <td>{{ order.address }}</td>
-        <td>{{ order.status }}</td>
-        <td>
-          {% if order.confirmed_by == "client" %}
-            <span style="color:green;">✅ Client</span>
-          {% elif order.confirmed_by == "admin" %}
-            <span style="color:blue;">🧑‍🍳 Admin</span>
-          {% else %}
-            <span style="color:gray;">—</span>
-          {% endif %}
-        </td>
-        <td>
-          {% if order.status == "pending" %}
-            <form method="POST" action="/update_status" style="display:inline;">
-              <input type="hidden" name="order_id" value="{{ order.id }}">
-              <button type="submit" class="btn btn-success">Marquer livré ✅</button>
-            </form>
-          {% else %}
-            —
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<header>
+    <h1>{{ rname }} <span>- Tableau de bord</span></h1>
+    <a class="logout" href="/logout">Déconnexion</a>
+</header>
+
+<main>
+    {% if orders %}
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Date</th>
+                <th>Numéro</th>
+                <th>Commande</th>
+                <th>Total (CDF)</th>
+                <th>Adresse</th>
+                <th>Status</th>
+                <th>Confirmation</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for order in orders %}
+            <tr>
+                <td data-label="ID">{{ order['id'] }}</td>
+                <td data-label="Date">{{ order['date'] }}</td>
+                <td data-label="Numéro">{{ order['number'] }}</td>
+                <td data-label="Commande">{{ order['items'] }}</td>
+                <td data-label="Total">{{ order['total'] }}</td>
+                <td data-label="Adresse">{{ order['address'] }}</td>
+                <td data-label="Status">
+                    {% if order['status'] == 'delivered' %}
+                        <span class="delivered">Livrée</span>
+                    {% else %}
+                        <span class="pending">En attente</span>
+                    {% endif %}
+                </td>
+                <td data-label="Confirmation">{{ order['confirmed_by'] if order['confirmed_by'] else "—" }}</td>
+                <td data-label="Action">
+                    {% if order['status'] != 'delivered' %}
+                        <form method="POST" action="/update_status">
+                            <input type="hidden" name="order_id" value="{{ order['id'] }}">
+                            <button type="submit">✅ Marquer livrée</button>
+                        </form>
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+        <p>Aucune commande disponible.</p>
+    {% endif %}
+</main>
+
 </body>
 </html>
