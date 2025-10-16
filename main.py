@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, render_template
 from twilio.twiml.messaging_response import MessagingResponse
 from supabase import create_client, Client
 from datetime import datetime
@@ -6,12 +6,12 @@ import os
 
 app = Flask(__name__)
 
-# --- Supabase config ---
+# --- 🔐 Supabase config ---
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# --- Menu du jour ---
+# --- 🍽 Menu du jour ---
 menu = {
     "1": ("Riz au poisson", 6000),
     "2": ("Poulet braisé", 8000),
@@ -22,7 +22,7 @@ menu = {
 # --- États utilisateurs ---
 user_state = {}
 
-# --- Fonction panier ---
+# --- 🧮 Fonction panier ---
 def format_cart(orders):
     lines, total = [], 0
     for item in orders:
@@ -33,7 +33,8 @@ def format_cart(orders):
     lines.append(f"\n💰 *Total : {total:,} CDF*")
     return "\n".join(lines), total
 
-# --- Sauvegarde dans Supabase ---
+
+# --- 💾 Sauvegarde commande dans Supabase ---
 def save_order_to_supabase(number, orders, address):
     try:
         items_summary = ", ".join([f"{o['qty']}x {o['dish']}" for o in orders])
@@ -53,7 +54,8 @@ def save_order_to_supabase(number, orders, address):
         print(f"❌ Error saving to Supabase: {e}")
         return None, None
 
-# --- Webhook principal ---
+
+# --- 🌍 Webhook principal ---
 @app.route("/webhook", methods=["POST"])
 def webhook():
     from_number = request.form.get("From")
@@ -145,9 +147,24 @@ def webhook():
 
     return str(resp)
 
+
+# --- 🖥️ Admin Dashboard ---
+@app.route("/admin")
+def admin_dashboard():
+    try:
+        response = supabase.table("orders").select("*").order("id", desc=True).execute()
+        orders = response.data
+    except Exception as e:
+        orders = []
+        print("Error fetching data:", e)
+
+    return render_template("dashboard.html", orders=orders)
+
+
 @app.route("/")
 def home():
     return "Bot is running ✅", 200
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
